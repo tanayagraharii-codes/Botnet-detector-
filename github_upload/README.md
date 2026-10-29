@@ -3,22 +3,6 @@
 Detects botnet traffic in network flows using a Random Forest trained on the
 CTU-13 dataset (real botnet and normal traffic captured at CTU University, Prague, 2011).
 
-**Live demo:** `https://<your-username>.github.io/<repo-name>/` (enable GitHub Pages: Settings → Pages → Branch: main, folder: / root)
-
-## Quick start
-
-**See the demo:** double-click `dashboard.html` (or open the live demo). No server or Python needed.
-
-**Retrain the model:**
-
-```bash
-pip install -r requirements.txt
-python train_model.py          # about 40 seconds
-```
-
-This rewrites `models/`, `report/` and `dashboard_data/dashboard_bundle.js`. Reload the dashboard to see the new results.
-
-**Check your own traffic in the dashboard:** open `dashboard.html`, choose **Your CSV file** under *Traffic source*, and drop in a CSV of flows exported from CICFlowMeter (Java or Python column names both work). Use **Start stream** to watch flows arrive one by one, or **Analyze all flows** to score the whole file at once, then **Download results** for a scored CSV. The file is processed in the browser and never uploaded. Two example files are in `samples/`.
 
 **Score your own flows from the command line:**
 
