@@ -1,0 +1,110 @@
+{
+  "model": "RandomForestClassifier",
+  "params": {
+    "n_estimators": 100,
+    "max_depth": 16,
+    "min_samples_leaf": 3,
+    "class_weight": "balanced"
+  },
+  "features": [
+    "Flow Duration",
+    "Tot Fwd Pkts",
+    "Tot Bwd Pkts",
+    "TotLen Fwd Pkts",
+    "TotLen Bwd Pkts",
+    "Fwd Pkt Len Mean",
+    "Bwd Pkt Len Mean",
+    "Flow Byts/s",
+    "Flow Pkts/s",
+    "Flow IAT Mean",
+    "Flow IAT Std",
+    "Fwd IAT Mean",
+    "Bwd IAT Mean",
+    "Pkt Len Mean",
+    "Pkt Len Std",
+    "SYN Flag Cnt",
+    "ACK Flag Cnt",
+    "RST Flag Cnt",
+    "FIN Flag Cnt",
+    "Down/Up Ratio"
+  ],
+  "threshold": 0.5,
+  "n_train": 62040,
+  "n_test": 20681,
+  "accuracy": 0.9927,
+  "precision": 0.9867,
+  "recall": 0.9938,
+  "f1": 0.9902,
+  "roc_auc": 0.9994,
+  "confusion_matrix": [
+    [
+      12890,
+      103
+    ],
+    [
+      48,
+      7640
+    ]
+  ],
+  "confusion_matrix_labels": [
+    "Normal (0)",
+    "Botnet (1)"
+  ],
+  "cross_validation": {
+    "accuracy": {
+      "mean": 0.992,
+      "std": 0.0007,
+      "folds": [
+        0.9913,
+        0.9928,
+        0.9926,
+        0.9922,
+        0.9911
+      ]
+    },
+    "precision": {
+      "mean": 0.9868,
+      "std": 0.0013,
+      "folds": [
+        0.9856,
+        0.9879,
+        0.9864,
+        0.9887,
+        0.9853
+      ]
+    },
+    "recall": {
+      "mean": 0.9918,
+      "std": 0.0013,
+      "folds": [
+        0.9911,
+        0.9928,
+        0.9937,
+        0.9902,
+        0.9909
+      ]
+    },
+    "f1": {
+      "mean": 0.9893,
+      "std": 0.0009,
+      "folds": [
+        0.9883,
+        0.9904,
+        0.9901,
+        0.9895,
+        0.9881
+      ]
+    },
+    "roc_auc": {
+      "mean": 0.9993,
+      "std": 0.0002,
+      "folds": [
+        0.9991,
+        0.9995,
+        0.9995,
+        0.9995,
+        0.9991
+      ]
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "raw_flows": 92212,
+  "raw_botnet": 38898,
+  "raw_normal": 53314,
+  "invalid_rows_removed": 0,
+  "duplicates_removed": 9491,
+  "duplicates_botnet": 8148,
+  "duplicates_normal": 1343,
+  "unique_flows": 82721,
+  "unique_botnet": 30750,
+  "unique_normal": 51971,
+  "fingerprint_feature": "Init Bwd Win Byts",
+  "fingerprint_value": 64240,
+  "fingerprint_value_counts": {
+    "normal": 442,
+    "botnet": 10307
+  }
+}

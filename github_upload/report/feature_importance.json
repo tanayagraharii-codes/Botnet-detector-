@@ -1,0 +1,122 @@
+[
+  {
+    "feature": "Flow IAT Std",
+    "impurity": 0.1477,
+    "permutation": 0.2151,
+    "permutation_std": 0.0015
+  },
+  {
+    "feature": "Flow Duration",
+    "impurity": 0.1069,
+    "permutation": 0.0053,
+    "permutation_std": 0.0008
+  },
+  {
+    "feature": "Down/Up Ratio",
+    "impurity": 0.0943,
+    "permutation": 0.1021,
+    "permutation_std": 0.0017
+  },
+  {
+    "feature": "Tot Bwd Pkts",
+    "impurity": 0.0699,
+    "permutation": 0.0155,
+    "permutation_std": 0.0007
+  },
+  {
+    "feature": "Flow Pkts/s",
+    "impurity": 0.0633,
+    "permutation": 0.0028,
+    "permutation_std": 0.0005
+  },
+  {
+    "feature": "Pkt Len Std",
+    "impurity": 0.0608,
+    "permutation": 0.0304,
+    "permutation_std": 0.0011
+  },
+  {
+    "feature": "Flow IAT Mean",
+    "impurity": 0.0549,
+    "permutation": 0.0038,
+    "permutation_std": 0.0004
+  },
+  {
+    "feature": "Tot Fwd Pkts",
+    "impurity": 0.0486,
+    "permutation": 0.011,
+    "permutation_std": 0.0004
+  },
+  {
+    "feature": "Pkt Len Mean",
+    "impurity": 0.0435,
+    "permutation": 0.0006,
+    "permutation_std": 0.0003
+  },
+  {
+    "feature": "Bwd IAT Mean",
+    "impurity": 0.0415,
+    "permutation": 0.0023,
+    "permutation_std": 0.0003
+  },
+  {
+    "feature": "Flow Byts/s",
+    "impurity": 0.039,
+    "permutation": 0.0008,
+    "permutation_std": 0.0004
+  },
+  {
+    "feature": "Fwd Pkt Len Mean",
+    "impurity": 0.0357,
+    "permutation": 0.0012,
+    "permutation_std": 0.0002
+  },
+  {
+    "feature": "TotLen Bwd Pkts",
+    "impurity": 0.0355,
+    "permutation": 0.0008,
+    "permutation_std": 0.0005
+  },
+  {
+    "feature": "Bwd Pkt Len Mean",
+    "impurity": 0.0353,
+    "permutation": 0.0014,
+    "permutation_std": 0.0007
+  },
+  {
+    "feature": "TotLen Fwd Pkts",
+    "impurity": 0.0344,
+    "permutation": 0.0011,
+    "permutation_std": 0.0006
+  },
+  {
+    "feature": "Fwd IAT Mean",
+    "impurity": 0.0286,
+    "permutation": 0.0012,
+    "permutation_std": 0.0005
+  },
+  {
+    "feature": "ACK Flag Cnt",
+    "impurity": 0.027,
+    "permutation": 0.0032,
+    "permutation_std": 0.0006
+  },
+  {
+    "feature": "FIN Flag Cnt",
+    "impurity": 0.015,
+    "permutation": 0.0041,
+    "permutation_std": 0.0003
+  },
+  {
+    "feature": "SYN Flag Cnt",
+    "impurity": 0.0139,
+    "permutation": 0.0082,
+    "permutation_std": 0.0007
+  },
+  {
+    "feature": "RST Flag Cnt",
+    "impurity": 0.0042,
+    "permutation": 0.0015,
+    "permutation_std": 0.0001
+  }
+]

@@ -1,0 +1,63 @@
+[
+  {
+    "model": "Logistic Regression",
+    "note": "Straight-line boundary; needs scaling",
+    "accuracy": 0.8615,
+    "precision": 0.8385,
+    "recall": 0.7772,
+    "f1": 0.8067,
+    "roc_auc": 0.9235,
+    "train_seconds": 0.35
+  },
+  {
+    "model": "Single Decision Tree",
+    "note": "One tree, same depth as the forest's trees",
+    "accuracy": 0.9906,
+    "precision": 0.987,
+    "recall": 0.9876,
+    "f1": 0.9873,
+    "roc_auc": 0.9934,
+    "train_seconds": 0.54
+  },
+  {
+    "model": "Gradient Boosting",
+    "note": "Trees built one after another, each fixing the last",
+    "accuracy": 0.9916,
+    "precision": 0.9872,
+    "recall": 0.9902,
+    "f1": 0.9887,
+    "roc_auc": 0.9993,
+    "train_seconds": 0.83
+  },
+  {
+    "model": "Random Forest + lab fingerprint",
+    "note": "Same forest, also given 'Init Bwd Win Byts'",
+    "accuracy": 0.9955,
+    "precision": 0.9912,
+    "recall": 0.9966,
+    "f1": 0.9939,
+    "roc_auc": 0.9998,
+    "train_seconds": 3.31
+  },
+  {
+    "model": "Random Forest (final)",
+    "note": "100 trees, behaviour features only",
+    "accuracy": 0.9927,
+    "precision": 0.9867,
+    "recall": 0.9938,
+    "f1": 0.9902,
+    "roc_auc": 0.9994,
+    "train_seconds": null,
+    "final": true
+  },
+  {
+    "model": "v1 setup (old script)",
+    "note": "Duplicates kept + lab fingerprint; scored on a different test set",
+    "accuracy": 0.9968,
+    "precision": 0.9947,
+    "recall": 0.9977,
+    "f1": 0.9962,
+    "roc_auc": 0.9998,
+    "train_seconds": null
+  }
+]

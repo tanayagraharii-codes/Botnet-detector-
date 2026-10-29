@@ -1,0 +1,991 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Botnet Traffic Detector</title>
+<meta name="description" content="Detect botnet activity in network flow data with a Random Forest model that runs entirely in your browser.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: operations console. Sticky one-row nav (brand, tabs, model status), page heading per tab, card grid that collapses to one column on narrow screens. */
+:root{
+  --bg:#F2F4F6; --surface:#FFFFFF; --surface-2:#F7F9FA; --ink:#13202B; --muted:#5B6B79; --faint:#8A99A6; --line:#DDE3E8;
+  --accent:#0B7A83; --accent-soft:#E0F1F2; --accent-ink:#FFFFFF;
+  --bot:#C93A2F; --bot-soft:#FBE8E6; --ok:#2E7D4F; --ok-soft:#E4F2E9; --warn:#A06A00; --warn-soft:#FBF1D9;
+  --f-body:"IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --f-mono:"IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --radius:10px;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0D1419; --surface:#151F27; --surface-2:#1A2630; --ink:#E3EAF0; --muted:#97A8B6; --faint:#6E8090; --line:#26343F;
+  --accent:#4CBDC6; --accent-soft:#163339; --accent-ink:#0D1419;
+  --bot:#F07B6F; --bot-soft:#3A1E1B; --ok:#6CC892; --ok-soft:#173023; --warn:#E2B44E; --warn-soft:#352A12;
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0D1419; --surface:#151F27; --surface-2:#1A2630; --ink:#E3EAF0; --muted:#97A8B6; --faint:#6E8090; --line:#26343F;
+  --accent:#4CBDC6; --accent-soft:#163339; --accent-ink:#0D1419;
+  --bot:#F07B6F; --bot-soft:#3A1E1B; --ok:#6CC892; --ok-soft:#173023; --warn:#E2B44E; --warn-soft:#352A12;
+  color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.5}
+[hidden]{display:none!important}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+::selection{background:color-mix(in srgb,var(--accent) 30%,transparent)}
+html{scrollbar-color:color-mix(in srgb,var(--faint) 60%,transparent) transparent}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.wrap{max-width:1320px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+
+/* top navigation */
+header.app{background:color-mix(in srgb,var(--surface) 92%,transparent);backdrop-filter:saturate(1.4) blur(8px);-webkit-backdrop-filter:saturate(1.4) blur(8px);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20}
+.nav{display:flex;align-items:center;gap:12px 28px;min-height:64px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:11px;min-width:0;flex:none}
+.mark{width:34px;height:34px;border-radius:9px;background:var(--accent);display:grid;place-items:center;flex:none}
+.mark svg{width:20px;height:20px}
+.brand b{display:block;font-size:16px;font-weight:700;letter-spacing:-.01em;line-height:1.2}
+.brand small{display:block;font-size:12px;color:var(--muted);line-height:1.3}
+nav.tabs{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;flex:1 1 auto;min-width:0}
+nav.tabs::-webkit-scrollbar{display:none}
+nav.tabs button{background:none;border:0;border-radius:8px;padding:8px 14px;cursor:pointer;color:var(--muted);font-weight:500;font-size:14px;white-space:nowrap;transition:color .15s ease-out,background-color .15s ease-out}
+nav.tabs button:hover{color:var(--ink);background:var(--surface-2)}
+nav.tabs button[aria-selected="true"]{color:var(--accent);background:var(--accent-soft);font-weight:600}
+.nav-meta{display:flex;align-items:center;gap:8px;flex:none}
+.chip{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:999px;padding:5px 12px;font-size:12.5px;color:var(--muted);background:var(--surface)}
+.chip .dot{background:var(--ok)}
+.chip b{color:var(--ink);font-weight:600}
+
+/* page headings */
+.page-head{grid-column:1/-1;padding:8px 0 4px}
+.page-head h1{font-size:26px;line-height:1.2;margin:0 0 6px;font-weight:700;letter-spacing:-.02em}
+.page-head p{margin:0;color:var(--muted);font-size:14.5px;max-width:72ch}
+
+main{padding-block:20px 56px}
+.grid{display:grid;gap:16px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px;min-width:0}
+.card h2{font-size:15px;line-height:1.3;margin:0 0 14px;font-weight:600;letter-spacing:-.005em}
+.card .sub{color:var(--muted);font-size:13px;margin:0 0 14px}
+.card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap}
+.label{font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600}
+
+/* controls */
+.controls{display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:7px 14px;cursor:pointer;font-weight:500}
+.btn{transition:border-color .15s ease-out,background-color .15s ease-out}
+.btn:hover{border-color:var(--accent)}
+.btn.primary:hover{background:color-mix(in srgb,var(--accent) 88%,var(--ink))}
+.btn:active{transform:translateY(1px)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.small{padding:4px 10px;font-size:12.5px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;background:var(--surface);padding:6px 10px;cursor:pointer;font-family:var(--f-mono);font-size:12px;color:var(--muted)}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.status{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:var(--muted)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--faint)}
+.dot.live{background:var(--ok);box-shadow:0 0 0 0 var(--ok);animation:pulse 1.6s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--ok) 60%,transparent)}100%{box-shadow:0 0 0 8px transparent}}
+@media (prefers-reduced-motion: reduce){.dot.live{animation:none}.meter u,.btn,nav.tabs button{transition:none}}
+.thr{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.controls .thr{margin-left:auto}
+.thr input[type=range]{width:160px;accent-color:var(--accent)}
+.progress{height:4px;background:var(--line);border-radius:4px;overflow:hidden;flex:1 1 120px;min-width:100px}
+.progress i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
+
+/* traffic source */
+.source-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+.source-head h2{margin:0}
+.seg.text button{font-family:var(--f-body);font-size:13px;padding:7px 14px}
+.drop{position:relative;display:grid;justify-items:center;gap:6px;text-align:center;border:1.5px dashed var(--line);border-radius:var(--radius);padding:26px 16px;margin-top:16px;cursor:pointer;background:var(--surface-2);transition:border-color .15s ease-out,background-color .15s ease-out}
+.drop:hover,.drop.over{border-color:var(--accent);background:var(--accent-soft)}
+.drop:focus-within{outline:2px solid var(--accent);outline-offset:2px}
+.drop svg{width:28px;height:28px;color:var(--accent)}
+.drop b{font-weight:600;font-size:14px}
+.drop u{color:var(--accent);text-underline-offset:3px}
+.drop span{font-size:12.5px;color:var(--muted);max-width:62ch}
+.file-info{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px 16px;margin-top:16px;padding:12px 14px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2)}
+.file-name{display:flex;align-items:center;gap:12px;min-width:0}
+.file-name svg{width:22px;height:22px;flex:none;color:var(--accent)}
+.file-name b{display:block;font-family:var(--f-mono);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.file-name span{font-size:12.5px;color:var(--muted)}
+.file-actions{display:flex;flex-wrap:wrap;gap:8px}
+.btn[disabled]{opacity:.5;cursor:not-allowed}
+.btn[disabled]:hover{border-color:var(--line)}
+.btn.primary[disabled]:hover{background:var(--accent);border-color:var(--accent)}
+.msg{border-radius:8px;padding:10px 12px;font-size:13px;margin-top:12px}
+.msg.error{background:var(--bot-soft);color:var(--bot);border:1px solid color-mix(in srgb,var(--bot) 30%,transparent)}
+td.conn{color:var(--muted);font-size:12px}
+td.na{color:var(--faint)}
+.feat-list{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 4px}
+.feat-list code{font-family:var(--f-mono);font-size:11.5px;background:var(--surface-2);border:1px solid var(--line);border-radius:5px;padding:2px 6px}
+
+/* KPI tiles */
+.kpis{grid-template-columns:repeat(5,minmax(0,1fr));gap:0;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+.kpis>.card{border:0;border-radius:0;box-shadow:1px 0 0 var(--line),0 1px 0 var(--line)}
+.kpi .v{font-family:var(--f-mono);font-size:28px;font-weight:600;line-height:1.15;margin:6px 0 4px;letter-spacing:-.02em}
+.kpi .d{font-size:12.5px;color:var(--muted)}
+.kpi.threat{background:var(--surface-2)}
+.kpi.threat .v .pill{font-size:15px;padding:4px 12px;letter-spacing:.04em}
+.meter{position:relative;height:6px;border-radius:3px;background:var(--line);margin:10px 0 6px;overflow:hidden}
+.meter u{position:absolute;inset:0 auto 0 0;width:0;border-radius:3px;background:var(--faint);transition:width .3s ease-out,background-color .3s ease-out}
+.meter u.ok{background:var(--ok)} .meter u.warn{background:var(--warn)} .meter u.bot{background:var(--bot)}
+.meter s{position:absolute;top:0;bottom:0;width:2px;background:var(--surface-2)}
+.pill{display:inline-flex;align-items:center;gap:5px;font-family:var(--f-mono);font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;white-space:nowrap}
+.pill.bot{background:var(--bot-soft);color:var(--bot)}
+.pill.ok{background:var(--ok-soft);color:var(--ok)}
+.pill.warn{background:var(--warn-soft);color:var(--warn)}
+.pill.neutral{background:var(--surface-2);color:var(--muted);border:1px solid var(--line)}
+
+.row-2{grid-template-columns:minmax(0,2fr) minmax(0,1fr)}
+.row-3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.row-half{grid-template-columns:repeat(2,minmax(0,1fr))}
+.chart-box{position:relative;height:240px}
+.chart-box.tall{height:260px}
+
+/* confusion matrix */
+.cm{display:grid;grid-template-columns:auto 1fr 1fr;gap:6px;font-size:12px}
+.cm .h{color:var(--muted);font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;font-weight:600;text-align:center;align-self:end}
+.cm .rh{color:var(--muted);font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;font-weight:600;align-self:center;writing-mode:vertical-rl;transform:rotate(180deg);text-align:center}
+.cm .c,.split .c{border-radius:8px;padding:14px 10px;text-align:center}
+.cm .c b,.split .c b{display:block;font-family:var(--f-mono);font-size:22px;font-weight:600}
+.cm .c span,.split .c span{font-size:12px;opacity:.9}
+.cm .good,.split .good{background:var(--ok-soft);color:var(--ok)}
+.cm .bad,.split .bad{background:var(--bot-soft);color:var(--bot)}
+.split{display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:12px}
+.split .note{grid-column:1/-1;margin-top:6px}
+
+/* feed */
+.feed-wrap{overflow:auto;max-height:420px;border:1px solid var(--line);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th,td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+th{position:sticky;top:0;background:var(--surface-2);font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;z-index:1}
+td.n,th.n{text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+tbody tr{cursor:pointer}
+tbody tr:hover{background:var(--surface-2)}
+tbody tr.alert td:first-child{box-shadow:inset 3px 0 0 var(--bot)}
+tbody tr.fresh{animation:fresh .8s ease-out}
+@keyframes fresh{from{background:var(--accent-soft)}to{background:transparent}}
+@media (prefers-reduced-motion: reduce){tbody tr.fresh{animation:none}}
+.sbar{display:inline-flex;align-items:center;gap:8px}
+.sbar i{display:block;width:60px;height:6px;background:var(--line);border-radius:3px;position:relative;overflow:hidden}
+.sbar i u{position:absolute;inset:0 auto 0 0;background:var(--ok);border-radius:3px}
+.sbar i u.hi{background:var(--bot)}
+.truth-ok{color:var(--ok)} .truth-bad{color:var(--bot);font-weight:600}
+.empty{padding:28px 16px;text-align:center;color:var(--muted)}
+
+.alerts{display:grid;gap:8px;max-height:420px;overflow:auto;align-content:start}
+.alert-item{border:1px solid var(--line);border-radius:8px;padding:10px 12px;background:var(--surface-2);cursor:pointer;transition:border-color .15s ease-out}
+.alert-item:hover{border-color:color-mix(in srgb,var(--bot) 45%,var(--line))}
+.alert-item.fp:hover{border-color:color-mix(in srgb,var(--warn) 45%,var(--line))}
+.alert-item .t{display:flex;justify-content:space-between;align-items:center;gap:8px;font-family:var(--f-mono);font-size:12px;color:var(--muted)}
+.alert-item .t b{color:var(--ink);font-weight:600}
+.alert-item p{margin:6px 0 0;font-size:12.5px;color:var(--muted)}
+.alert-item p em{font-style:normal;color:var(--ink)}
+
+/* inspector */
+.insp{grid-template-columns:minmax(0,1.25fr) minmax(0,1fr)}
+.presets{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+fieldset{border:0;padding:0;margin:0 0 14px}
+legend{font-size:11.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600;margin-bottom:8px;padding:0}
+.fields{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px 10px}
+.field label{display:flex;justify-content:space-between;gap:6px;font-size:12px;color:var(--ink);margin-bottom:3px}
+.field label small{color:var(--faint);font-family:var(--f-mono);font-size:11px}
+.field input{width:100%;border:1px solid var(--line);background:var(--surface-2);border-radius:6px;padding:6px 8px;font-family:var(--f-mono);font-size:12.5px}
+.field input:focus{border-color:var(--accent);outline:none;background:var(--surface)}
+.field input.changed{border-color:var(--warn)}
+.verdict{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:14px}
+.big{font-family:var(--f-mono);font-size:48px;font-weight:600;line-height:1;letter-spacing:-.03em}
+.big.bot{color:var(--bot)} .big.ok{color:var(--ok)}
+.votes{display:grid;grid-template-columns:repeat(20,1fr);gap:3px;margin:8px 0 4px;max-width:360px}
+.votes i{aspect-ratio:1;border-radius:2px;background:var(--ok);opacity:.85}
+.votes i.b{background:var(--bot)}
+.why{display:grid;gap:9px;margin-top:6px}
+.why-row{display:grid;grid-template-columns:minmax(0,130px) 1fr auto;gap:10px;align-items:center;font-size:12.5px}
+.why-row .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.why-track{height:8px;background:var(--surface-2);border:1px solid var(--line);border-radius:4px;position:relative;overflow:hidden}
+.why-track u{position:absolute;top:0;bottom:0;left:0;background:var(--bot);border-radius:3px}
+.why-track u.down{background:var(--ok)}
+.note{font-size:12px;color:var(--muted);margin-top:12px}
+
+/* report */
+.stat-row{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
+.stat{background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:9px 10px}
+.stat b{display:block;font-family:var(--f-mono);font-size:18px;font-weight:600}
+.stat span{font-size:12px;color:var(--muted)}
+.tbl-wrap{overflow-x:auto}
+tr.final td{background:var(--accent-soft);font-weight:600}
+tbody.static tr{cursor:default}
+tbody.static tr:hover{background:transparent}
+tbody.static tr.final:hover td{background:var(--accent-soft)}
+.mini-bar{display:inline-block;height:6px;border-radius:3px;background:var(--accent);vertical-align:middle;margin-right:8px}
+.imp-list{display:grid;gap:7px}
+.imp{display:grid;grid-template-columns:minmax(0,140px) 1fr 52px;gap:10px;align-items:center;font-size:12.5px}
+.imp .tr{height:8px;background:var(--surface-2);border:1px solid var(--line);border-radius:4px;overflow:hidden}
+.imp .tr u{display:block;height:100%;background:var(--accent)}
+.clean{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.clean .stat b{font-size:22px}
+.callout{border:1px solid color-mix(in srgb,var(--warn) 30%,transparent);background:var(--warn-soft);border-radius:8px;padding:12px 14px;font-size:13px}
+.callout b{color:var(--warn)}
+.callout p{margin:.2em 0}
+
+/* how it works */
+.steps{display:grid;gap:10px;counter-reset:s;padding:0;margin:0}
+.steps li{list-style:none;display:grid;grid-template-columns:30px 1fr;gap:10px;align-items:start}
+.steps li::before{counter-increment:s;content:counter(s);font-family:var(--f-mono);font-size:12px;font-weight:600;color:var(--accent);background:var(--accent-soft);border-radius:6px;display:grid;place-items:center;height:26px}
+.steps b{display:block}
+.steps span{color:var(--muted)}
+.prose p{max-width:70ch;margin:.5em 0}
+
+@media (max-width:1100px){.row-3{grid-template-columns:1fr 1fr}.kpi .v{font-size:24px}}
+@media (max-width:980px){.kpis{grid-template-columns:repeat(6,minmax(0,1fr))}.kpis>.card{grid-column:span 2}.kpis>.card:nth-child(n+4){grid-column:span 3}.controls .thr{margin-left:0}}
+@media (max-width:860px){header.app{position:static}.nav{padding-block:10px}nav.tabs{order:3;flex-basis:100%}.nav-meta{margin-left:auto}.page-head h1{font-size:22px}.row-2,.insp,.row-half,.row-3{grid-template-columns:1fr}.stat-row{grid-template-columns:repeat(3,minmax(0,1fr))}.clean{grid-template-columns:1fr}}
+@media (max-width:520px){.nav-meta{display:none}.kpis{grid-template-columns:1fr 1fr}.kpis>.card,.kpis>.card:nth-child(n+4){grid-column:span 1}.kpis>.kpi.threat{grid-column:1/-1}.stat-row{grid-template-columns:1fr 1fr}.kpi .v{font-size:20px}}
+</style>
+</head>
+<body>
+
+<header class="app">
+  <div class="wrap nav">
+    <div class="brand">
+      <div class="mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-ink)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 8.2-7 10-4-1.8-7-5.5-7-10V6l7-3z"/><path d="M8.5 12.5l2.3 2.3 4.7-5"/></svg></div>
+      <div><b>Botnet Traffic Detector</b></div>
+    </div>
+    <nav class="tabs" role="tablist" aria-label="Views">
+      <button role="tab" id="tab-live" aria-controls="view-live" aria-selected="true">Live analysis</button>
+      <button role="tab" id="tab-inspect" aria-controls="view-inspect" aria-selected="false">Flow inspector</button>
+      <button role="tab" id="tab-report" aria-controls="view-report" aria-selected="false">Model performance</button>
+      <button role="tab" id="tab-how" aria-controls="view-how" aria-selected="false">Methodology</button>
+    </nav>
+    <div class="nav-meta"><span class="chip" id="modelChip"><span class="dot"></span>Model ready</span></div>
+  </div>
+</header>
+
+<main class="wrap">
+
+<!-- ============ LIVE MONITOR ============ -->
+<section id="view-live" role="tabpanel" aria-labelledby="tab-live" class="grid">
+  <div class="card">
+    <div class="source-head">
+      <div><h2>Traffic source</h2><p class="sub" id="srcSub" hidden></p></div>
+      <div class="seg text" role="group" aria-label="Traffic source"><button id="srcSample" aria-pressed="true">CTU-13 sample</button><button id="srcFile" aria-pressed="false">Your CSV file</button></div>
+    </div>
+    <label class="drop" id="drop" hidden>
+      <input type="file" id="fileIn" accept=".csv,text/csv" style="position:absolute;opacity:0;width:1px;height:1px">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M20 16v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3"/></svg>
+      <b id="dropText">Drop a CSV file here or <u>browse</u></b>
+      <span>CICFlowMeter CSV · processed locally</span>
+    </label>
+    <div class="file-info" id="fileInfo" hidden>
+      <div class="file-name">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h6"/></svg>
+        <div style="min-width:0"><b id="fileName"></b><span id="fileMeta"></span></div>
+      </div>
+      <div class="file-actions">
+        <button class="btn primary" id="analyzeBtn">Analyze all flows</button>
+        <button class="btn" id="dlBtn" disabled title="Available once every flow has been analyzed">Download results</button>
+        <button class="btn" id="replaceBtn">Choose another file</button>
+      </div>
+    </div>
+    <div class="msg error" id="fileErr" role="alert" hidden></div>
+  </div>
+
+  <div class="card">
+    <div class="controls">
+      <button class="btn primary" id="playBtn">▶ Start stream</button>
+      <button class="btn" id="resetBtn">Reset</button>
+      <div class="seg" id="speedSeg" role="group" aria-label="Replay speed"></div>
+      <span class="status"><span class="dot" id="statusDot"></span><span id="statusText">Idle</span></span>
+      <div class="progress" aria-hidden="true"><i id="progressBar"></i></div>
+      <span class="mono" id="progressText" style="font-size:12px;color:var(--muted)">0 / 400</span>
+      <label class="thr"><span class="label">Alert threshold</span>
+        <input type="range" id="thrLive" min="0.05" max="0.95" step="0.01" value="0.5">
+        <span class="mono" id="thrLiveVal">0.50</span></label>
+    </div>
+  </div>
+
+  <div class="grid kpis">
+    <div class="card kpi threat"><div class="label">Threat level</div><div class="v" id="kThreat"><span class="pill neutral">IDLE</span></div><div class="meter" aria-hidden="true"><u id="kThreatBar"></u><s style="left:10%"></s><s style="left:30%"></s></div><div class="d" id="kThreatD">botnet share of last 50 flows</div></div>
+    <div class="card kpi"><div class="label">Flows analysed</div><div class="v" id="kTotal">0</div><div class="d" id="kTotalD">of 400 held-out test flows</div></div>
+    <div class="card kpi"><div class="label">Alerts raised</div><div class="v" id="kAlerts" style="color:var(--bot)">0</div><div class="d" id="kAlertsD">flows scored above threshold</div></div>
+    <div class="card kpi"><div class="label">Session accuracy</div><div class="v" id="kAcc">–</div><div class="d" id="kAccD">verdicts checked against true labels</div></div>
+    <div class="card kpi"><div class="label">Scoring time</div><div class="v" id="kTime">–</div><div class="d" id="kTimeD">per flow, all 100 trees</div></div>
+  </div>
+
+  <div class="grid row-2">
+    <div class="card">
+      <div class="card-head"><div><h2>Botnet score per flow</h2><p class="sub" id="tlSub" hidden>Most recent 60 flows. Bars reaching the shaded band exceed the alert threshold.</p></div></div>
+      <div class="chart-box"><canvas id="timelineChart" aria-label="Botnet score of recent flows"></canvas></div>
+    </div>
+    <div class="card">
+      <h2 id="cmTitle">Verdicts vs ground truth</h2>
+      <p class="sub" id="cmSub" hidden>Each replayed flow carries its true label from the dataset.</p>
+      <div class="cm" id="sessionCM"></div>
+    </div>
+  </div>
+
+  <div class="grid row-2">
+    <div class="card">
+      <div class="card-head"><div><h2>Flow feed</h2></div><span class="mono" id="feedCount" style="font-size:12px;color:var(--muted)">0 flows</span></div>
+      <div class="feed-wrap">
+        <table>
+          <thead><tr><th>#</th><th id="thConn" hidden>Connection</th><th class="n">Duration</th><th class="n">Pkts out/in</th><th class="n">Bytes</th><th class="n">Pkts/s</th><th class="n">IAT std</th><th>Score</th><th>Verdict</th><th>Truth</th></tr></thead>
+          <tbody id="feed"></tbody>
+        </table>
+        <div class="empty" id="feedEmpty"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head"><div><h2>Alert log</h2></div></div>
+      <div class="alerts" id="alerts"><div class="empty">No alerts yet.</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ INSPECTOR ============ -->
+<section id="view-inspect" role="tabpanel" aria-labelledby="tab-inspect" class="grid insp" hidden>
+  <div class="card">
+    <h2>Flow features</h2>
+    
+    <div class="presets">
+      <button class="btn small" data-preset="exNormal">Real normal flow</button>
+      <button class="btn small" data-preset="exBotnet">Real botnet flow</button>
+      <button class="btn small" data-preset="medNormal">Typical normal</button>
+      <button class="btn small" data-preset="medBotnet">Typical botnet</button>
+      <button class="btn small" data-preset="random">Random from current source</button>
+    </div>
+    <div id="fieldGroups"></div>
+    <p class="note" id="inspSource">Real normal flow from the test set</p>
+  </div>
+  <div class="grid" style="align-content:start">
+    <div class="card">
+      <h2>Model verdict</h2>
+      
+      <div class="verdict"><div class="big" id="iScore">–</div><div id="iPill"></div></div>
+      <div class="label" id="iVotesLbl">Tree votes</div>
+      <div class="votes" id="iVotes" role="img" aria-label="Tree votes"></div>
+      <p class="note" id="iVotesNote" hidden></p>
+    </div>
+    <div class="card">
+      <h2>Why this verdict</h2>
+      <p class="sub" id="whySub" hidden>How much the score changes if one feature is swapped for its typical value in the other class.</p>
+      <div class="why" id="why"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ REPORT ============ -->
+<section id="view-report" role="tabpanel" aria-labelledby="tab-report" class="grid" hidden>
+  <div class="card">
+    <div class="card-head">
+      <div><h2>Held-out test set</h2><p class="sub" id="testSub" hidden></p></div>
+      <label class="thr"><span class="label">Threshold</span>
+        <input type="range" id="thrReport" min="0.05" max="0.95" step="0.01" value="0.5">
+        <span class="mono" id="thrReportVal">0.50</span></label>
+    </div>
+    <div class="grid row-half">
+      <div class="stat-row" id="testStats" style="align-content:start"></div>
+      <div class="cm" id="testCM"></div>
+    </div>
+    
+  </div>
+
+  <div class="grid row-3">
+    <div class="card"><h2>Score distribution</h2><div class="chart-box"><canvas id="histChart"></canvas></div></div>
+    <div class="card"><h2>ROC curve</h2><p class="sub" id="rocSub" hidden></p><div class="chart-box"><canvas id="rocChart"></canvas></div></div>
+    <div class="card"><h2>Precision–recall curve</h2><div class="chart-box"><canvas id="prChart"></canvas></div></div>
+  </div>
+
+  <div class="grid row-half">
+    <div class="card">
+      <h2>Model comparison</h2>
+      
+      <div class="tbl-wrap"><table><thead><tr><th>Model</th><th class="n">Accuracy</th><th class="n">F1</th><th class="n">ROC-AUC</th></tr></thead><tbody class="static" id="cmpBody"></tbody></table></div>
+      <p class="note" id="cmpNote" hidden></p>
+    </div>
+    <div class="card">
+      <h2>5-fold cross-validation</h2>
+      
+      <div class="tbl-wrap"><table><thead><tr><th>Metric</th><th class="n">Mean</th><th class="n">± Std</th><th class="n">Folds</th></tr></thead><tbody class="static" id="cvBody"></tbody></table></div>
+      
+    </div>
+  </div>
+
+  <div class="grid row-half">
+    <div class="card">
+      <div class="card-head"><div><h2>Feature importance</h2><p class="sub" id="impSub" hidden></p></div>
+        <div class="seg" role="group" aria-label="Importance measure"><button id="impPerm" aria-pressed="true">Permutation</button><button id="impImp" aria-pressed="false">Impurity</button></div></div>
+      <div class="imp-list" id="impList"></div>
+    </div>
+    <div class="card">
+      <h2>Data cleaning</h2>
+      
+      <div class="clean" id="cleanStats"></div>
+      <div class="callout" style="margin-top:12px" id="fpCallout"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ HOW IT WORKS ============ -->
+<section id="view-how" role="tabpanel" aria-labelledby="tab-how" class="grid row-half" hidden>
+  <div class="card prose">
+    <h2>Training pipeline</h2>
+    
+    <ol class="steps" id="steps"></ol>
+  </div>
+  <div class="card prose">
+    <h2>About this tool</h2>
+    <p>The detector is a Random Forest classifier trained on the CTU-13 botnet dataset. The trained model is exported from Python and executed directly in this page: every score is computed locally by evaluating all 100 decision trees, and matches the output of the Python model.</p>
+    <p><b>Live analysis</b> passes flows through the model one at a time. By default it replays 400 labelled flows from the held-out test set, which the model never saw during training. You can instead load your own CSV of flow records; it is parsed in the browser and never leaves this device.</p>
+    <p><b>Flow inspector</b> shows the verdict for any single flow, with the tree votes and the features that drove the decision. Values can be edited to test what-if scenarios.</p>
+    <h2 style="margin-top:18px">Input format</h2>
+    <p>Export flows with <a href="https://github.com/ahlashkari/CICFlowMeter" target="_blank" rel="noopener">CICFlowMeter</a>. Both the Java column names (<span class="mono">Flow Duration</span>) and the Python ones (<span class="mono">flow_duration</span>) are recognised. Durations and inter-arrival times are expected in microseconds. The file must contain these 20 features:</p>
+    <div class="feat-list" id="featList"></div>
+    <p>Optional columns: <span class="mono">Label</span> (0 = normal, 1 = botnet) enables accuracy checks, and <span class="mono">Src IP</span>, <span class="mono">Dst IP</span> and port columns are shown next to each flow.</p>
+    <p><b>Limitations.</b> CTU-13 was captured on a single university network in 2011. Present-day traffic differs substantially, so expect false positives and treat results as indicative rather than as a security verdict. Retrain on recent labelled traffic before relying on the model.</p>
+    <h2 style="margin-top:18px">Files</h2>
+    <p class="mono" style="font-size:12.5px;line-height:1.8">train_model.py → models/botnet_rf.joblib<br>report/*.json → numbers on this page<br>dashboard_data/dashboard_bundle.js → model + flows for this page</p>
+    <p class="note" id="genNote"></p>
+  </div>
+</section>
+</main>
+
+<script src="dashboard_data/chart.umd.min.js"></script>
+<script src="dashboard_data/dashboard_bundle.js"></script>
+<script>
+(function(){
+"use strict";
+var B = window.BOTNET;
+if(!B){ document.querySelector("main").innerHTML = '<div class="card empty">Model data not found. Run <span class="mono">python train_model.py</span> first, then reopen this page.</div>'; return; }
+var F = B.features, FI = {}; F.forEach(function(f,i){ FI[f]=i; });
+var M = B.metrics;
+var hasChart = typeof Chart !== "undefined";
+
+/* ---------- model: walk every tree (mirrors sklearn's float32 comparison) ---------- */
+var TREES = B.forest.trees;
+function treeProb(t, x){ var n=0; while(t.l[n] !== -1){ n = (Math.fround(x[t.f[n]]) <= t.t[n]) ? t.l[n] : t.r[n]; } return t.p[n]; }
+function predict(x){ var s=0, votes=0; for(var i=0;i<TREES.length;i++){ var p=treeProb(TREES[i],x); s+=p; if(p>=0.5) votes++; } return {score:s/TREES.length, votes:votes}; }
+
+/* ---------- helpers ---------- */
+function $(id){ return document.getElementById(id); }
+function css(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+function fmtInt(n){ return Math.round(n).toLocaleString("en-US"); }
+function pct(v,d){ return (v*100).toFixed(d===undefined?2:d)+"%"; }
+function fmtBytes(n){ if(n>=1e6) return (n/1e6).toFixed(1)+" MB"; if(n>=1e3) return (n/1e3).toFixed(1)+" KB"; return Math.round(n)+" B"; }
+function fmtDur(us){ var ms=us/1000; if(ms>=60000) return (ms/60000).toFixed(1)+" min"; if(ms>=1000) return (ms/1000).toFixed(1)+" s"; return ms.toFixed(ms<10?2:0)+" ms"; }
+function fmtNum(v){ if(v===0) return "0"; var a=Math.abs(v); if(a>=1e6) return (v/1e6).toFixed(2)+"M"; if(a>=1e4) return (v/1e3).toFixed(1)+"k"; if(a>=100) return v.toFixed(0); if(a>=1) return v.toFixed(2); return v.toPrecision(2); }
+function esc(s){ return String(s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];}); }
+
+var state = { thr: B.threshold || 0.5 };
+
+/* ---------- header ---------- */
+$("modelChip").innerHTML = '<span class="dot"></span>Model ready';
+$("modelChip").title = "Random Forest trained on CTU-13; runs locally in your browser";
+
+/* ---------- tabs ---------- */
+var tabs = ["live","inspect","report","how"];
+function showTab(name){
+  tabs.forEach(function(t){ $("tab-"+t).setAttribute("aria-selected", t===name ? "true":"false"); $("view-"+t).hidden = t!==name; });
+  if(name==="report") drawReportCharts();
+}
+tabs.forEach(function(t){ $("tab-"+t).addEventListener("click", function(){ showTab(t); }); });
+
+/* ---------- chart theming ---------- */
+var charts = {};
+function chartBase(){
+  if(!hasChart) return;
+  Chart.defaults.font.family = css("--f-mono") || "monospace";
+  Chart.defaults.font.size = 11.5;
+  Chart.defaults.color = css("--muted");
+  Chart.defaults.borderColor = css("--line");
+  var tt = Chart.defaults.plugins.tooltip;
+  tt.backgroundColor = css("--surface"); tt.titleColor = css("--ink"); tt.bodyColor = css("--muted");
+  tt.borderColor = css("--line"); tt.borderWidth = 1; tt.padding = 10; tt.cornerRadius = 6; tt.displayColors = false;
+  tt.titleFont = { family: css("--f-body"), weight: "600", size: 12.5 };
+}
+var thresholdLine = {
+  id:"thresholdLine",
+  beforeDatasetsDraw:function(chart, args, opts){
+    if(opts.value===undefined || opts.value===null) return;
+    var ctx=chart.ctx, a=chart.chartArea, s=opts.axis==="x" ? chart.scales.x : chart.scales.y;
+    var p=s.getPixelForValue(opts.value); ctx.save();
+    if(opts.shade && opts.axis!=="x"){ ctx.fillStyle=css("--bot"); ctx.globalAlpha=.07; ctx.fillRect(a.left,a.top,a.right-a.left,p-a.top); ctx.globalAlpha=1; }
+    ctx.setLineDash([5,4]); ctx.strokeStyle=css("--ink"); ctx.globalAlpha=.55; ctx.lineWidth=1.2; ctx.beginPath();
+    if(opts.axis==="x"){ ctx.moveTo(p,a.top); ctx.lineTo(p,a.bottom); } else { ctx.moveTo(a.left,p); ctx.lineTo(a.right,p); }
+    ctx.stroke(); ctx.restore();
+  }
+};
+if(hasChart) Chart.register(thresholdLine);
+
+/* ============================ LIVE MONITOR ============================ */
+var S = B.stream, WIN = 60;
+var SAMPLE = { kind:"sample", unit:"held-out test flows", labelled:true, hasMeta:false };
+var src = SAMPLE, fileSrc = null, mode = "sample";
+var speeds = [["0.5×",1400],["1×",700],["3×",230],["10×",70],["Max",12]];
+var live = { idx:0, playing:false, timer:null, speed:700, results:[], timeSum:0 };
+
+function buildSpeeds(){
+  $("speedSeg").innerHTML = "";
+  speeds.forEach(function(s){
+    var b=document.createElement("button"); b.textContent=s[0]; b.setAttribute("aria-pressed", s[1]===live.speed ? "true":"false");
+    b.onclick=function(){ live.speed=s[1]; buildSpeeds(); if(live.playing){ stop(); start(); } };
+    $("speedSeg").appendChild(b);
+  });
+}
+
+function makeTimeline(){
+  if(!hasChart) return;
+  charts.tl = new Chart($("timelineChart"), {
+    type:"bar",
+    data:{ labels:[], datasets:[{ data:[], backgroundColor:[], borderRadius:2, borderSkipped:"bottom", minBarLength:2, barPercentage:.8, categoryPercentage:1 }] },
+    options:{ responsive:true, maintainAspectRatio:false, animation:false,
+      scales:{ x:{ ticks:{ maxTicksLimit:10, maxRotation:0 }, grid:{ display:false } }, y:{ min:0, max:1, ticks:{ stepSize:.25, callback:function(v){ return v.toFixed(2); } }, grid:{ color:css("--line") }, border:{ display:false } } },
+      plugins:{ legend:{display:false}, thresholdLine:{ value:state.thr, axis:"y", shade:true },
+        tooltip:{ callbacks:{ title:function(i){ return "Flow #"+i[0].label; }, label:function(c){ return "score "+c.raw.toFixed(4); } } } } }
+  });
+}
+function refreshTimeline(){
+  if(!charts.tl) return;
+  var rs = live.results.slice(-WIN);
+  charts.tl.data.labels = rs.map(function(r){ return r.n; });
+  charts.tl.data.datasets[0].data = rs.map(function(r){ return r.score; });
+  charts.tl.data.datasets[0].backgroundColor = rs.map(function(r){ return r.score>=state.thr ? css("--bot") : css("--ok"); });
+  charts.tl.options.plugins.thresholdLine.value = state.thr;
+  charts.tl.update();
+}
+
+function cmHTML(tn,fp,fn,tp){
+  return '<span></span><span class="h">Said normal</span><span class="h">Said botnet</span>'+
+    '<span class="rh">Normal</span><div class="c good"><b>'+fmtInt(tn)+'</b><span>correct</span></div><div class="c bad"><b>'+fmtInt(fp)+'</b><span>false alarms</span></div>'+
+    '<span class="rh">Botnet</span><div class="c bad"><b>'+fmtInt(fn)+'</b><span>missed</span></div><div class="c good"><b>'+fmtInt(tp)+'</b><span>caught</span></div>';
+}
+
+function hasLabel(r){ return r.y===0 || r.y===1; }
+function connText(m){
+  if(!m || (!m.src && !m.dst)) return "";
+  var a=(m.src||"?")+(m.sport?":"+m.sport:""), b=(m.dst||"?")+(m.dport?":"+m.dport:"");
+  return a+" → "+b;
+}
+function rowHTML(r){
+  var x=r.x, alert=r.score>=state.thr, lab=hasLabel(r), right=lab && (alert?1:0)===r.y;
+  return '<td class="mono">'+String(r.n).padStart(3,"0")+'</td>'+
+    (src.hasMeta ? '<td class="mono conn">'+esc(connText(r.meta))+'</td>' : '')+
+    '<td class="n">'+fmtDur(x[FI["Flow Duration"]])+'</td>'+
+    '<td class="n">'+x[FI["Tot Fwd Pkts"]]+' / '+x[FI["Tot Bwd Pkts"]]+'</td>'+
+    '<td class="n">'+fmtBytes(x[FI["TotLen Fwd Pkts"]]+x[FI["TotLen Bwd Pkts"]])+'</td>'+
+    '<td class="n">'+fmtNum(x[FI["Flow Pkts/s"]])+'</td>'+
+    '<td class="n">'+fmtDur(x[FI["Flow IAT Std"]])+'</td>'+
+    '<td><span class="sbar"><i><u class="'+(alert?"hi":"")+'" style="width:'+(r.score*100).toFixed(1)+'%"></u></i><span class="mono">'+r.score.toFixed(3)+'</span></span></td>'+
+    '<td>'+(alert?'<span class="pill bot">BOTNET</span>':'<span class="pill ok">normal</span>')+'</td>'+
+    (lab ? '<td class="'+(right?"truth-ok":"truth-bad")+'">'+(r.y?"botnet":"normal")+(right?" ✓":" ✗")+'</td>' : '<td class="na" title="No label in file">—</td>');
+}
+
+function addRow(r){
+  $("feedEmpty").hidden = true;
+  var tr=document.createElement("tr"); tr.className="fresh"+(r.score>=state.thr?" alert":""); tr.dataset.n=r.n; tr.innerHTML=rowHTML(r);
+  tr.addEventListener("click", function(){ openInInspector(r); });
+  var body=$("feed"); body.insertBefore(tr, body.firstChild);
+  while(body.children.length>150) body.removeChild(body.lastChild);
+}
+function rerenderFeed(){
+  var body=$("feed"); body.innerHTML="";
+  live.results.slice(-150).forEach(function(r){
+    var tr=document.createElement("tr"); tr.className=(r.score>=state.thr?"alert":""); tr.innerHTML=rowHTML(r);
+    tr.addEventListener("click", function(){ openInInspector(r); }); body.insertBefore(tr, body.firstChild);
+  });
+}
+
+function describe(r){
+  var x=r.x, bits=[];
+  if(x[FI["Flow Duration"]]>2e6 && x[FI["Flow Pkts/s"]]<5) bits.push("long, quiet connection");
+  if(x[FI["Flow IAT Std"]] < x[FI["Flow IAT Mean"]]*0.3 && x[FI["Tot Fwd Pkts"]]+x[FI["Tot Bwd Pkts"]]>3) bits.push("very regular timing");
+  if(x[FI["Pkt Len Std"]]<5 && x[FI["Tot Fwd Pkts"]]+x[FI["Tot Bwd Pkts"]]>2) bits.push("uniform packet sizes");
+  if(x[FI["SYN Flag Cnt"]]>0 && x[FI["Tot Bwd Pkts"]]<=1) bits.push("connection attempt with little reply");
+  if(x[FI["Down/Up Ratio"]]>=2) bits.push("more data in than out");
+  return bits.length ? bits.join(", ") : "pattern learned from botnet traffic";
+}
+function addAlert(r){
+  var box=$("alerts"); var e=box.querySelector(".empty"); if(e) e.remove();
+  var fp = r.y===0, conn=connText(r.meta);
+  var d=document.createElement("div"); d.className="alert-item"+(fp?" fp":""); d.tabIndex=0;
+  d.innerHTML='<div class="t"><span>'+(fp?'<span class="pill warn">FALSE ALARM</span>':'<span class="pill bot">BOTNET</span>')+' <b>Flow #'+String(r.n).padStart(3,"0")+'</b></span><span>'+esc(r.time)+'</span></div>'+
+    '<p>'+(conn?'<em class="mono">'+esc(conn)+'</em> · ':'')+'Score <em class="mono">'+r.score.toFixed(3)+'</em> · '+r.votes+'/'+TREES.length+' trees · '+esc(describe(r))+'</p>';
+  d.addEventListener("click", function(){ openInInspector(r); });
+  d.addEventListener("keydown", function(ev){ if(ev.key==="Enter") openInInspector(r); });
+  box.insertBefore(d, box.firstChild);
+  while(box.children.length>60) box.removeChild(box.lastChild);
+}
+function rerenderAlerts(){
+  var box=$("alerts"); box.innerHTML="";
+  var al=live.results.filter(function(r){ return r.score>=state.thr; });
+  if(!al.length){ box.innerHTML='<div class="empty">No alerts yet.</div>'; return; }
+  al.slice(-60).forEach(addAlert);
+}
+
+function updateStats(){
+  var rs=live.results, n=rs.length, tp=0,fp=0,tn=0,fn=0, al=0;
+  rs.forEach(function(r){ var a=r.score>=state.thr; if(a) al++; if(!hasLabel(r)) return; if(a&&r.y) tp++; else if(a) fp++; else if(r.y) fn++; else tn++; });
+  var nl=tp+fp+tn+fn;
+  $("kTotal").textContent = fmtInt(n);
+  $("kTotalD").textContent = "of "+fmtInt(S.length)+" "+src.unit;
+  $("kAlerts").textContent = fmtInt(al);
+  $("kAlertsD").textContent = !n ? "flows scored above threshold" : nl ? al+" alerts: "+tp+" confirmed, "+fp+" false" : pct(al/n,1)+" of analyzed flows";
+  $("kAcc").textContent = nl ? pct((tp+tn)/nl,1) : (n && !src.labelled ? "n/a" : "–");
+  $("kAccD").textContent = nl ? (tp+tn)+" of "+fmtInt(nl)+" labelled verdicts correct" : (src.labelled ? "verdicts checked against true labels" : "no Label column in this file");
+  $("kTime").textContent = n ? (live.timeSum/n).toFixed(2)+" ms" : "–";
+  var recent=rs.slice(-50), share = recent.length ? recent.filter(function(r){return r.score>=state.thr;}).length/recent.length : 0;
+  var lvl = !n ? ['neutral','IDLE'] : share<0.1 ? ['ok','LOW'] : share<0.3 ? ['warn','ELEVATED'] : ['bot','HIGH'];
+  $("kThreat").innerHTML = '<span class="pill '+lvl[0]+'">'+lvl[1]+'</span>';
+  $("kThreatBar").style.width = (share*100)+"%"; $("kThreatBar").className = n ? lvl[0] : "";
+  $("kThreatD").textContent = n ? pct(share,0)+" of the last "+recent.length+" flows flagged" : "botnet share of last 50 flows";
+  if(src.labelled){
+    $("sessionCM").className="cm"; $("sessionCM").innerHTML = cmHTML(tn,fp,fn,tp);
+  } else {
+    $("sessionCM").className="split";
+    $("sessionCM").innerHTML = '<div class="c bad"><b>'+fmtInt(al)+'</b><span>flagged as botnet</span></div><div class="c good"><b>'+fmtInt(n-al)+'</b><span>classified normal</span></div>'+
+      '';
+  }
+  $("feedCount").textContent = fmtInt(n)+" flows";
+  $("dlBtn").disabled = !(src.kind==="file" && n && live.idx>=S.length);
+  $("progressBar").style.width = (live.idx/S.length*100)+"%";
+  $("progressText").textContent = live.idx+" / "+S.length;
+}
+
+function scoreNext(){
+  var rec=S[live.idx]; live.idx++;
+  var t0=performance.now(), res=predict(rec.x); live.timeSum+=performance.now()-t0;
+  var r={ n:live.idx, x:rec.x, y:rec.y, meta:rec.meta||null, score:res.score, votes:res.votes,
+          time:(rec.meta && rec.meta.ts) || new Date().toTimeString().slice(0,8) };
+  live.results.push(r);
+  return r;
+}
+function finished(){ $("statusText").textContent = src.kind==="file" ? "Analysis complete" : "Stream complete"; $("playBtn").textContent="↻ Replay"; }
+function tick(){
+  if(live.idx>=S.length){ stop(); finished(); updateStats(); return; }
+  var r=scoreNext();
+  addRow(r); if(r.score>=state.thr) addAlert(r);
+  updateStats(); refreshTimeline();
+  if(live.idx>=S.length){ stop(); finished(); updateStats(); }
+}
+function start(){ live.playing=true; $("statusDot").classList.add("live"); $("statusText").textContent="Streaming"; $("playBtn").textContent="⏸ Pause"; live.timer=setInterval(tick, live.speed); }
+function stop(){ live.playing=false; clearInterval(live.timer); $("statusDot").classList.remove("live"); if(live.idx<S.length) $("statusText").textContent = live.idx ? "Paused" : "Idle"; $("playBtn").textContent = live.idx ? "▶ Resume" : "▶ Start stream"; }
+function reset(){ stop(); live.idx=0; live.results=[]; live.timeSum=0; $("feed").innerHTML=""; $("feedEmpty").hidden=false; $("alerts").innerHTML='<div class="empty">No alerts yet.</div>'; $("statusText").textContent="Idle"; $("playBtn").textContent="▶ Start stream"; updateStats(); refreshTimeline(); }
+$("playBtn").addEventListener("click", function(){ if(live.batch) return; if(live.idx>=S.length){ reset(); start(); return; } live.playing ? stop() : start(); });
+
+/* ---------- batch analysis: score every remaining flow, in chunks so the page stays responsive ---------- */
+function setBusy(b){ live.batch=b; ["playBtn","resetBtn","analyzeBtn","replaceBtn","srcSample","srcFile"].forEach(function(id){ $(id).disabled=b; }); }
+function analyzeAll(){
+  if(live.batch) return;
+  stop(); if(live.idx>=S.length) reset();
+  setBusy(true); $("statusDot").classList.add("live");
+  (function chunk(){
+    var end=Math.min(S.length, live.idx+1500);
+    while(live.idx<end) scoreNext();
+    $("statusText").textContent = "Analyzing… "+pct(live.idx/S.length,0);
+    $("progressBar").style.width = (live.idx/S.length*100)+"%"; $("progressText").textContent = fmtInt(live.idx)+" / "+fmtInt(S.length);
+    if(live.idx<S.length){ setTimeout(chunk,0); return; }
+    setBusy(false); $("statusDot").classList.remove("live");
+    $("feedEmpty").hidden=true; rerenderFeed(); rerenderAlerts(); updateStats(); refreshTimeline(); finished();
+  })();
+}
+$("analyzeBtn").addEventListener("click", analyzeAll);
+
+/* ---------- traffic source: built-in sample or the user's CSV ---------- */
+var ALIASES = {
+  "totalfwdpackets":"Tot Fwd Pkts","totalbackwardpackets":"Tot Bwd Pkts","totalbwdpackets":"Tot Bwd Pkts",
+  "totallengthoffwdpackets":"TotLen Fwd Pkts","totallengthofbwdpackets":"TotLen Bwd Pkts",
+  "fwdpacketlengthmean":"Fwd Pkt Len Mean","bwdpacketlengthmean":"Bwd Pkt Len Mean",
+  "flowbytess":"Flow Byts/s","flowpacketss":"Flow Pkts/s","packetlengthmean":"Pkt Len Mean","packetlengthstd":"Pkt Len Std",
+  "synflagcount":"SYN Flag Cnt","ackflagcount":"ACK Flag Cnt","rstflagcount":"RST Flag Cnt","finflagcount":"FIN Flag Cnt"
+};
+function norm(h){ return String(h).toLowerCase().replace(/[^a-z0-9]/g,""); }
+var NORM = {}; F.forEach(function(f,i){ NORM[norm(f)]=i; }); Object.keys(ALIASES).forEach(function(k){ NORM[k]=FI[ALIASES[k]]; });
+
+function parseCSV(t){
+  if(t.charCodeAt(0)===0xFEFF) t=t.slice(1);
+  if(t.indexOf('"')<0) return t.split(/\r?\n/).map(function(l){ return l.split(","); });
+  var rows=[], row=[], f="", q=false, c;
+  for(var i=0;i<t.length;i++){
+    c=t[i];
+    if(q){ if(c==='"'){ if(t[i+1]==='"'){ f+='"'; i++; } else q=false; } else f+=c; }
+    else if(c==='"') q=true;
+    else if(c===','){ row.push(f); f=""; }
+    else if(c==='\n'){ row.push(f); rows.push(row); row=[]; f=""; }
+    else if(c!=='\r') f+=c;
+  }
+  if(f!=="" || row.length){ row.push(f); rows.push(row); }
+  return rows;
+}
+function parseLabel(v){
+  v=String(v===undefined?"":v).trim().toLowerCase();
+  if(v==="1" || v.indexOf("bot")>=0 || v.indexOf("attack")>=0 || v.indexOf("malicious")>=0 || v.indexOf("malware")>=0) return 1;
+  if(v==="0" || v.indexOf("normal")>=0 || v.indexOf("benign")>=0 || v.indexOf("background")>=0) return 0;
+  return null;
+}
+function loadCSV(text, name){
+  var rows=parseCSV(text);
+  if(rows.length<2) throw new Error("The file has a header but no flow records.");
+  var head=rows[0].map(norm), idx=F.map(function(){ return -1; });
+  head.forEach(function(h,j){ var fi=NORM[h]; if(fi!==undefined && idx[fi]<0) idx[fi]=j; });
+  var missing=F.filter(function(f,i){ return idx[i]<0; });
+  if(missing.length) throw new Error("This file is missing "+missing.length+" of the 20 required feature columns: "+missing.join(", ")+". See Methodology for the expected format.");
+  function col(names){ for(var k=0;k<names.length;k++){ var j=head.indexOf(names[k]); if(j>=0) return j; } return -1; }
+  var cLab=col(["label","class"]), cSrc=col(["srcip","sourceip"]), cDst=col(["dstip","destinationip"]),
+      cSp=col(["srcport","sourceport"]), cDp=col(["dstport","destinationport"]), cTs=col(["timestamp"]);
+  var recs=[], skipped=0, nLab=0;
+  for(var r=1;r<rows.length;r++){
+    var row=rows[r];
+    if(row.length===1 && row[0].trim()==="") continue;
+    if(row.length<head.length){ skipped++; continue; }
+    var x=idx.map(function(j){ var v=parseFloat(row[j]); return isFinite(v) ? v : 0; });
+    var y=cLab>=0 ? parseLabel(row[cLab]) : null; if(y!==null) nLab++;
+    var meta=null;
+    if(cSrc>=0 || cDst>=0 || cTs>=0) meta={ src:cSrc>=0?row[cSrc]:"", dst:cDst>=0?row[cDst]:"", sport:cSp>=0?row[cSp]:"", dport:cDp>=0?row[cDp]:"", ts:cTs>=0?row[cTs]:"" };
+    recs.push({ x:x, y:y, meta:meta });
+  }
+  if(!recs.length) throw new Error("No usable flow records were found in the file.");
+  fileSrc = { info:{ kind:"file", name:name, unit:"flows in "+name, labelled:nLab>0, hasMeta:cSrc>=0||cDst>=0, hasTs:cTs>=0, skipped:skipped, nLab:nLab }, recs:recs };
+  mode="file"; useSource(fileSrc.info, fileSrc.recs);
+}
+function showErr(m){ $("fileErr").textContent=m; $("fileErr").hidden=!m; }
+function readFile(file){
+  showErr("");
+  if(!file) return;
+  if(!/\.csv$/i.test(file.name) && file.type!=="text/csv"){ showErr("“"+file.name+"” is not a CSV file. Export your flows from CICFlowMeter as .csv and try again."); return; }
+  if(file.size>300*1024*1024){ showErr("This file is "+(file.size/1048576).toFixed(0)+" MB. Files up to 300 MB are supported; split larger captures into parts."); return; }
+  $("dropText").textContent = "Reading "+file.name+"…";
+  var fr=new FileReader();
+  fr.onload=function(){ try{ loadCSV(String(fr.result), file.name); } catch(e){ showErr(e.message); } $("dropText").innerHTML='Drop a CSV file here or <u>browse</u>'; $("fileIn").value=""; };
+  fr.onerror=function(){ showErr("The file could not be read."); $("dropText").innerHTML='Drop a CSV file here or <u>browse</u>'; };
+  fr.readAsText(file);
+}
+function useSource(info, recs){
+  stop(); src=info; S=recs; reset(); renderSource();
+}
+function renderSource(){
+  $("srcSample").setAttribute("aria-pressed", mode==="sample"); $("srcFile").setAttribute("aria-pressed", mode==="file");
+  var file = mode==="file" && fileSrc;
+  $("drop").hidden = mode!=="file" || !!file;
+  $("fileInfo").hidden = !file;
+  $("srcSub").textContent = mode==="sample"
+    ? "Replaying "+fmtInt(B.stream.length)+" labelled flows from the held-out CTU-13 test set, which the model never saw during training."
+    : "Analyze your own flow records. The file is parsed in this browser and never leaves your device.";
+  if(file){
+    var i=fileSrc.info;
+    $("fileName").textContent = i.name;
+    $("fileMeta").textContent = fmtInt(fileSrc.recs.length)+" flows · 20 of 20 features matched · "+
+      (i.labelled ? "labels found for "+fmtInt(i.nLab) : "no labels")+(i.hasMeta ? " · connection details found" : "")+
+      (i.skipped ? " · "+fmtInt(i.skipped)+" malformed rows skipped" : "");
+  }
+  $("thConn").hidden = !src.hasMeta;
+  $("cmTitle").textContent = src.labelled ? "Verdicts vs ground truth" : "Verdict summary";
+  $("cmSub").textContent = src.kind==="sample" ? "Each replayed flow carries its true label from the dataset."
+    : src.labelled ? "Verdicts compared with the Label column in your file." : "Your file has no labels, so verdicts cannot be checked for accuracy.";
+  $("feedEmpty").innerHTML = src.kind==="sample"
+    ? "No flows yet"
+    : "Ready to analyze";
+  updateStats();
+}
+$("srcSample").addEventListener("click", function(){ if(mode==="sample") return; mode="sample"; showErr(""); useSource(SAMPLE, B.stream); });
+$("srcFile").addEventListener("click", function(){ if(mode==="file") return; mode="file"; if(fileSrc) useSource(fileSrc.info, fileSrc.recs); else renderSource(); });
+$("fileIn").addEventListener("change", function(e){ readFile(e.target.files[0]); });
+$("replaceBtn").addEventListener("click", function(){ $("fileIn").click(); });
+["dragenter","dragover"].forEach(function(ev){ $("drop").addEventListener(ev, function(e){ e.preventDefault(); $("drop").classList.add("over"); }); });
+["dragleave","drop"].forEach(function(ev){ $("drop").addEventListener(ev, function(e){ e.preventDefault(); $("drop").classList.remove("over"); }); });
+$("drop").addEventListener("drop", function(e){ readFile(e.dataTransfer.files[0]); });
+
+/* ---------- export scored flows ---------- */
+function csvCell(v){ v=String(v); return /[",\n]/.test(v) ? '"'+v.replace(/"/g,'""')+'"' : v; }
+$("dlBtn").addEventListener("click", function(){
+  var i=src, head=["flow"];
+  if(i.hasMeta) head.push("src_ip","src_port","dst_ip","dst_port");
+  if(i.hasTs) head.push("timestamp");
+  head.push("botnet_score","verdict");
+  if(i.labelled) head.push("label","correct");
+  var lines=[head.join(",")];
+  live.results.forEach(function(r){
+    var bot=r.score>=state.thr, m=r.meta||{}, row=[r.n];
+    if(i.hasMeta) row.push(m.src,m.sport,m.dst,m.dport);
+    if(i.hasTs) row.push(m.ts);
+    row.push(r.score.toFixed(4), bot?"BOTNET":"normal");
+    if(i.labelled) row.push(hasLabel(r)?r.y:"", hasLabel(r)?((bot?1:0)===r.y?"yes":"no"):"");
+    lines.push(row.map(csvCell).join(","));
+  });
+  var a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob([lines.join("\n")+"\n"],{type:"text/csv"}));
+  a.download=i.name.replace(/\.csv$/i,"")+"_scored.csv";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(function(){ URL.revokeObjectURL(a.href); }, 1000);
+});
+$("resetBtn").addEventListener("click", reset);
+
+/* ---------- shared threshold ---------- */
+function setThreshold(v){
+  state.thr = Math.round(v*100)/100;
+  ["thrLive","thrReport"].forEach(function(id){ $(id).value=state.thr; });
+  $("thrLiveVal").textContent = $("thrReportVal").textContent = state.thr.toFixed(2);
+  updateStats(); refreshTimeline(); rerenderFeed(); rerenderAlerts(); renderTestAtThreshold(); renderInspector();
+}
+["thrLive","thrReport"].forEach(function(id){ $(id).addEventListener("input", function(e){ setThreshold(parseFloat(e.target.value)); }); });
+
+/* ============================ INSPECTOR ============================ */
+var GROUPS = [
+  ["Size and volume", ["Tot Fwd Pkts","Tot Bwd Pkts","TotLen Fwd Pkts","TotLen Bwd Pkts","Fwd Pkt Len Mean","Bwd Pkt Len Mean","Pkt Len Mean","Pkt Len Std","Down/Up Ratio"]],
+  ["Speed and timing", ["Flow Duration","Flow Byts/s","Flow Pkts/s","Flow IAT Mean","Flow IAT Std","Fwd IAT Mean","Bwd IAT Mean"]],
+  ["TCP flags", ["SYN Flag Cnt","ACK Flag Cnt","RST Flag Cnt","FIN Flag Cnt"]]
+];
+var UNITS = {"Flow Duration":"µs","Flow IAT Mean":"µs","Flow IAT Std":"µs","Fwd IAT Mean":"µs","Bwd IAT Mean":"µs","TotLen Fwd Pkts":"bytes","TotLen Bwd Pkts":"bytes","Fwd Pkt Len Mean":"bytes","Bwd Pkt Len Mean":"bytes","Pkt Len Mean":"bytes","Pkt Len Std":"bytes","Flow Byts/s":"B/s","Flow Pkts/s":"pkt/s","Tot Fwd Pkts":"pkts","Tot Bwd Pkts":"pkts","SYN Flag Cnt":"count","ACK Flag Cnt":"count","RST Flag Cnt":"count","FIN Flag Cnt":"count","Down/Up Ratio":"ratio"};
+var insp = { x: B.examples.normal.slice(), base: B.examples.normal.slice() };
+
+$("fieldGroups").innerHTML = GROUPS.map(function(g){
+  return '<fieldset><legend>'+g[0]+'</legend><div class="fields">'+g[1].map(function(f){
+    var i=FI[f]; return '<div class="field"><label for="in'+i+'">'+f+' <small>'+UNITS[f]+'</small></label><input id="in'+i+'" data-i="'+i+'" type="number" step="any" inputmode="decimal"></div>';
+  }).join("")+'</div></fieldset>';
+}).join("");
+
+function fillInputs(){ F.forEach(function(f,i){ var el=$("in"+i); el.value = +insp.x[i].toPrecision(10); el.classList.remove("changed"); }); }
+document.querySelectorAll(".field input").forEach(function(el){
+  el.addEventListener("input", function(){ var i=+el.dataset.i, v=parseFloat(el.value); insp.x[i]=isFinite(v)?v:0; el.classList.toggle("changed", insp.x[i]!==insp.base[i]); renderInspector(); });
+});
+function loadFlow(x, label){ insp.x=x.slice(); insp.base=x.slice(); fillInputs(); $("inspSource").textContent=label.charAt(0).toUpperCase()+label.slice(1); renderInspector(); }
+document.querySelectorAll("[data-preset]").forEach(function(b){
+  b.addEventListener("click", function(){
+    var p=b.dataset.preset;
+    if(p==="exNormal") loadFlow(B.examples.normal,"real normal flow from the test set");
+    if(p==="exBotnet") loadFlow(B.examples.botnet,"real botnet flow from the test set");
+    if(p==="medNormal") loadFlow(B.typical.normal_median,"median of every feature across normal training flows");
+    if(p==="medBotnet") loadFlow(B.typical.botnet_median,"median of every feature across botnet training flows");
+    if(p==="random"){ var k=Math.floor(Math.random()*S.length); loadFlow(S[k].x, flowLabel({ n:k+1, y:S[k].y, meta:S[k].meta })); }
+  });
+});
+function flowLabel(r){
+  var conn=connText(r.meta), lab=hasLabel(r) ? "true label: "+(r.y?"botnet":"normal") : "unlabelled";
+  return src.kind==="file" ? "flow #"+r.n+" of "+src.name+" ("+(conn?conn+", ":"")+lab+")"
+                           : "flow #"+String(r.n).padStart(3,"0")+" from the CTU-13 sample ("+lab+")";
+}
+function openInInspector(r){ loadFlow(r.x, flowLabel(r)); showTab("inspect"); }
+
+function renderInspector(){
+  var res=predict(insp.x), bot=res.score>=state.thr;
+  $("iScore").textContent=res.score.toFixed(3); $("iScore").className="big "+(bot?"bot":"ok");
+  $("iPill").innerHTML = bot ? '<span class="pill bot">BOTNET</span>' : '<span class="pill ok">NORMAL</span>';
+  var v=""; for(var i=0;i<TREES.length;i++){ v+='<i class="'+(i<res.votes?"b":"")+'"></i>'; } $("iVotes").innerHTML=v;
+  $("iVotes").setAttribute("aria-label", res.votes+" of "+TREES.length+" trees vote botnet");
+  $("iVotesLbl").textContent = "Tree votes: "+res.votes+" botnet · "+(TREES.length-res.votes)+" normal";
+  $("iVotesNote").textContent = "Score ≥ "+state.thr.toFixed(2)+" counts as botnet (the alert threshold).";
+  // what-if: swap each feature for the other class's typical value
+  var ref = bot ? B.typical.normal_median : B.typical.botnet_median;
+  var rows = F.map(function(f,i){ var x2=insp.x.slice(); x2[i]=ref[i]; var s2=predict(x2).score; return {f:f, i:i, to:ref[i], s2:s2, d:s2-res.score}; })
+    .sort(function(a,b){ return Math.abs(b.d)-Math.abs(a.d); }).slice(0,6).filter(function(r){ return Math.abs(r.d)>=0.005; });
+  $("whySub").textContent = bot ? "Score if one feature took its typical normal value instead. The biggest drops mark what looks most like a bot."
+                                : "Score if one feature took its typical botnet value instead. The biggest rises mark what would make it look like a bot.";
+  if(!rows.length){ $("why").innerHTML='<div class="empty">No single feature changes the score much. The verdict rests on many features together.</div>'; return; }
+  var max=Math.max.apply(null, rows.map(function(r){return Math.abs(r.d);}));
+  $("why").innerHTML = rows.map(function(r){
+    return '<div class="why-row" title="'+esc(r.f)+': '+fmtNum(insp.x[r.i])+' → '+fmtNum(r.to)+'"><span class="nm">'+esc(r.f)+'</span>'+
+      '<span class="why-track"><u class="'+(r.d<0?"down":"")+'" style="width:'+(Math.abs(r.d)/max*100).toFixed(0)+'%"></u></span>'+
+      '<span class="mono" style="font-size:12px">'+(r.d>0?"+":"")+r.d.toFixed(3)+'</span></div>';
+  }).join("");
+}
+
+/* ============================ REPORT ============================ */
+var C = B.curves, HN=C.hist_normal, HB=C.hist_botnet, NB=HN.length;
+var totN = HN.reduce(function(a,b){return a+b;},0), totB = HB.reduce(function(a,b){return a+b;},0);
+function atThreshold(t){ var k=Math.round(t*NB), fp=0,tp=0; for(var i=k;i<NB;i++){ fp+=HN[i]; tp+=HB[i]; } return {tp:tp, fp:fp, fn:totB-tp, tn:totN-fp}; }
+$("testSub").textContent = fmtInt(M.n_test)+" flows the model never saw in training ("+fmtInt(totB)+" botnet, "+fmtInt(totN)+" normal)";
+function renderTestAtThreshold(){
+  var c=atThreshold(state.thr), prec=c.tp/Math.max(1,c.tp+c.fp), rec=c.tp/Math.max(1,c.tp+c.fn), f1=2*prec*rec/Math.max(1e-9,prec+rec), acc=(c.tp+c.tn)/(totN+totB);
+  $("testStats").innerHTML = [["Accuracy",pct(acc)],["Precision",pct(prec)],["Recall",pct(rec)],["F1",pct(f1)],["False alarms",fmtInt(c.fp)]]
+    .map(function(s){ return '<div class="stat"><b>'+s[1]+'</b><span>'+s[0]+'</span></div>'; }).join("");
+  $("testCM").innerHTML = cmHTML(c.tn,c.fp,c.fn,c.tp);
+  if(charts.pr){ charts.pr.data.datasets[1].data=[{x:rec,y:prec}]; charts.pr.update(); }
+  if(charts.roc){ charts.roc.data.datasets[1].data=[{x:c.fp/totN,y:rec}]; charts.roc.update(); }
+  if(charts.hist){ charts.hist.options.plugins.thresholdLine.value = state.thr*NB - 0.5; charts.hist.update(); }
+}
+$("rocSub").textContent = "Area under curve "+M.roc_auc.toFixed(4)+" (1.0 is perfect)";
+
+function drawReportCharts(){
+  if(!hasChart || charts.hist) { renderTestAtThreshold(); return; }
+  var labels = HN.map(function(_,i){ return (i/NB).toFixed(2); });
+  charts.hist = new Chart($("histChart"), { type:"bar",
+    data:{ labels:labels, datasets:[
+      { label:"Normal", data:HN.map(function(v){return v||null;}), backgroundColor:css("--ok"), barPercentage:1, categoryPercentage:1 },
+      { label:"Botnet", data:HB.map(function(v){return v||null;}), backgroundColor:css("--bot"), barPercentage:1, categoryPercentage:1 } ] },
+    options:{ responsive:true, maintainAspectRatio:false, animation:false,
+      scales:{ x:{ stacked:true, ticks:{ autoSkip:false, maxRotation:0, callback:function(v,i){ return i%20===0 ? (i/NB).toFixed(1) : null; } }, grid:{display:false}, title:{display:true,text:"botnet score"} }, y:{ stacked:true, type:"logarithmic", grid:{color:css("--line")}, title:{display:true,text:"flows"}, ticks:{ callback:function(v){ var l=Math.log10(v); return Math.abs(l-Math.round(l))<1e-9 ? fmtInt(v) : null; } } } },
+      plugins:{ legend:{ position:"bottom", labels:{ boxWidth:10 } }, thresholdLine:{ value:state.thr*NB-0.5, axis:"x" } } } });
+  function curve(id, pts, xl, yl, extra){
+    return new Chart($(id), { type:"scatter",
+      data:{ datasets:[
+        { data:pts.map(function(p){return {x:p[0],y:p[1]};}), showLine:true, borderColor:css("--accent"), borderWidth:2, pointRadius:0, fill:false },
+        { data:[], pointRadius:6, pointBackgroundColor:css("--bot"), pointBorderColor:css("--surface"), pointBorderWidth:2 } ].concat(extra||[]) },
+      options:{ responsive:true, maintainAspectRatio:false, animation:false,
+        scales:{ x:{ min:0, max:1, title:{display:true,text:xl}, grid:{color:css("--line")} }, y:{ min:id==="prChart"?0.5:0, max:1, title:{display:true,text:yl}, grid:{color:css("--line")} } },
+        plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:function(c){ return xl+" "+c.parsed.x.toFixed(3)+", "+yl+" "+c.parsed.y.toFixed(3); } } } } } });
+  }
+  charts.roc = curve("rocChart", C.roc, "false alarm rate", "recall", [{ data:[{x:0,y:0},{x:1,y:1}], showLine:true, borderColor:css("--faint"), borderDash:[4,4], borderWidth:1, pointRadius:0 }]);
+  charts.pr = curve("prChart", C.pr, "recall", "precision");
+  renderTestAtThreshold();
+}
+
+// comparison table
+(function(){
+  var rows=B.comparison, max=Math.max.apply(null, rows.map(function(r){return r.accuracy;})), min=Math.min.apply(null, rows.map(function(r){return r.accuracy;}));
+  $("cmpBody").innerHTML = rows.map(function(r){
+    var w = 10 + (r.accuracy-min)/Math.max(1e-9,max-min)*70;
+    return '<tr class="'+(r.final?"final":"")+'"><td title="'+esc(r.note)+'">'+esc(r.model)+'<div style="font-size:11px;color:var(--muted);font-weight:400;white-space:normal">'+esc(r.note)+'</div></td>'+
+      '<td class="n"><span class="mini-bar" style="width:'+w.toFixed(0)+'px"></span>'+pct(r.accuracy)+'</td><td class="n">'+pct(r.f1)+'</td><td class="n">'+r.roc_auc.toFixed(4)+'</td></tr>';
+  }).join("");
+  var fpRow = rows.filter(function(r){return r.model.indexOf("fingerprint")>=0;})[0];
+  var final = rows.filter(function(r){return r.final;})[0];
+  if(fpRow && final) $("cmpNote").textContent = "Giving the forest the lab fingerprint adds "+((fpRow.accuracy-final.accuracy)*100).toFixed(2)+" points of accuracy, but that gain comes from recognising the 2011 lab computers, not bot behaviour, so the final model leaves it out.";
+})();
+// cross-validation
+(function(){
+  var cv=M.cross_validation, names={accuracy:"Accuracy",precision:"Precision",recall:"Recall",f1:"F1",roc_auc:"ROC-AUC"};
+  $("cvBody").innerHTML = Object.keys(names).map(function(k){
+    return '<tr><td>'+names[k]+'</td><td class="n">'+cv[k].mean.toFixed(4)+'</td><td class="n">'+cv[k].std.toFixed(4)+'</td><td class="n" style="color:var(--muted)">'+cv[k].folds.map(function(v){return v.toFixed(3);}).join(" ")+'</td></tr>';
+  }).join("");
+})();
+// importance
+var impMode="permutation";
+function renderImportance(){
+  var key=impMode, rows=B.importance.slice().sort(function(a,b){return b[key]-a[key];}).slice(0,12), max=Math.max(1e-9,rows[0][key]);
+  $("impSub").textContent = key==="permutation" ? "F1 lost when a feature's values are shuffled on test data" : "How much each feature's splits purify the trees (built-in)";
+  $("impList").innerHTML = rows.map(function(r){
+    return '<div class="imp"><span title="'+esc(r.feature)+'" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(r.feature)+'</span><span class="tr"><u style="width:'+(Math.max(0,r[key])/max*100).toFixed(1)+'%"></u></span><span class="mono" style="text-align:right">'+r[key].toFixed(3)+'</span></div>';
+  }).join("");
+  $("impPerm").setAttribute("aria-pressed", key==="permutation"); $("impImp").setAttribute("aria-pressed", key==="impurity");
+}
+$("impPerm").onclick=function(){ impMode="permutation"; renderImportance(); };
+$("impImp").onclick=function(){ impMode="impurity"; renderImportance(); };
+// cleaning
+(function(){
+  var c=B.cleaning;
+  $("cleanStats").innerHTML = [[fmtInt(c.raw_flows),"flows in the CSVs"],[fmtInt(c.duplicates_removed),"exact duplicates removed ("+fmtInt(c.duplicates_botnet)+" botnet)"],[fmtInt(c.unique_flows),"unique flows used"]]
+    .map(function(s){ return '<div class="stat"><b>'+s[0]+'</b><span>'+s[1]+'</span></div>'; }).join("");
+  $("fpCallout").innerHTML = '<p><b>Left out: '+esc(c.fingerprint_feature)+'.</b> The value '+c.fingerprint_value+' is the default TCP window of the infected Windows lab machines. It appears in '+fmtInt(c.fingerprint_value_counts.botnet)+' botnet flows and only '+fmtInt(c.fingerprint_value_counts.normal)+' normal ones.</p><p>A model that leans on it learns to spot those particular computers, which would not carry over to a new network.</p>';
+})();
+// steps
+$("steps").innerHTML = [
+  ["Load","Read the botnet and normal CSVs: "+fmtInt(B.cleaning.raw_flows)+" flows."],
+  ["Clean","Drop broken rows and "+fmtInt(B.cleaning.duplicates_removed)+" duplicates so no flow is in both training and test data."],
+  ["Choose features",F.length+" behaviour features: sizes, speeds, timing and TCP flags."],
+  ["Split","75% to train ("+fmtInt(M.n_train)+"), 25% held out to test ("+fmtInt(M.n_test)+")."],
+  ["Cross-validate","5-fold check on the training set to confirm the result is stable."],
+  ["Train",B.forest.n_trees+" decision trees, each on a random sample of flows and features."],
+  ["Evaluate","Score the held-out flows, compare with simpler models, measure feature importance."],
+  ["Export","Save the model, the reports and this dashboard's data bundle."]
+].map(function(s){ return '<li><div><b>'+s[0]+'</b><span>'+s[1]+'</span></div></li>'; }).join("");
+$("genNote").textContent = "Data bundle generated "+B.generated+".";
+$("featList").innerHTML = F.map(function(f){ return "<code>"+esc(f)+"</code>"; }).join("");
+
+/* ---------- init ---------- */
+chartBase(); buildSpeeds(); makeTimeline(); renderSource(); fillInputs(); renderInspector(); renderImportance(); renderTestAtThreshold();
+setThreshold(state.thr);
+if(window.matchMedia){ window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function(){ location.reload(); }); }
+})();
+</script>
+</body>
+</html>

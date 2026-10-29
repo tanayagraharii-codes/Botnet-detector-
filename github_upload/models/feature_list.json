@@ -1,0 +1,22 @@
+[
+  "Flow Duration",
+  "Tot Fwd Pkts",
+  "Tot Bwd Pkts",
+  "TotLen Fwd Pkts",
+  "TotLen Bwd Pkts",
+  "Fwd Pkt Len Mean",
+  "Bwd Pkt Len Mean",
+  "Flow Byts/s",
+  "Flow Pkts/s",
+  "Flow IAT Mean",
+  "Flow IAT Std",
+  "Fwd IAT Mean",
+  "Bwd IAT Mean",
+  "Pkt Len Mean",
+  "Pkt Len Std",
+  "SYN Flag Cnt",
+  "ACK Flag Cnt",
+  "RST Flag Cnt",
+  "FIN Flag Cnt",
+  "Down/Up Ratio"
+]
